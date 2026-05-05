@@ -5,7 +5,11 @@ A super simple FastAPI application that allows students to view and sign up for 
 ## Features
 
 - View all available extracurricular activities
-- Sign up for activities
+- Authentication with role support (`student`, `admin`)
+- Session-based token login/logout
+- Role-based access control for protected endpoints
+- Sign up for activities (authenticated users)
+- Admin-only unregister operation
 
 ## Getting Started
 
@@ -29,8 +33,18 @@ A super simple FastAPI application that allows students to view and sign up for 
 
 | Method | Endpoint                                                          | Description                                                         |
 | ------ | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
-| GET    | `/activities`                                                     | Get all activities with their details and current participant count |
-| POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Sign up for an activity                                             |
+| POST   | `/auth/login`                                                     | Authenticate and receive a bearer token                             |
+| POST   | `/auth/logout`                                                    | Logout and invalidate current token                                 |
+| GET    | `/auth/me`                                                        | Get current authenticated user details                              |
+| GET    | `/activities`                                                     | Get all activities (authenticated users only)                       |
+| POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Sign up for an activity (students can only sign up themselves)      |
+| DELETE | `/activities/{activity_name}/unregister?email=student@...`       | Unregister a student (admin only)                                   |
+
+## Demo Credentials
+
+- Admin: `teacher` / `teach123`
+- Student: `alex` / `student123`
+- Student: `jamie` / `student456`
 
 ## Data Model
 
