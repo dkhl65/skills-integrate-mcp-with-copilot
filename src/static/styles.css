@@ -28,6 +28,12 @@ header h1 {
   margin-bottom: 10px;
 }
 
+.auth-status {
+  margin-top: 10px;
+  font-size: 14px;
+  opacity: 0.95;
+}
+
 main {
   display: flex;
   flex-wrap: wrap;
@@ -55,6 +61,10 @@ section h3 {
   padding-bottom: 10px;
   border-bottom: 1px solid #ddd;
   color: #1a237e;
+}
+
+#auth-container {
+  max-width: 500px;
 }
 
 .activity-card {
@@ -190,6 +200,12 @@ button:hover {
 
 .hidden {
   display: none;
+}
+
+#message {
+  width: 100%;
+  max-width: 1030px;
+  margin: 0 auto;
 }
 
 footer {

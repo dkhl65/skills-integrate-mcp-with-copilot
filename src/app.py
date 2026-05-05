@@ -1,13 +1,12 @@
-"""
-High School Management System API
+"""High School activities API with simple auth and role-based access control."""
 
-A super simple FastAPI application that allows students to view and sign up
-for extracurricular activities at Mergington High School.
-"""
+from typing import Optional
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 import os
 from pathlib import Path
 
@@ -18,6 +17,66 @@ app = FastAPI(title="Mergington High School API",
 current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+# In-memory users for MVP auth.
+users = {
+    "teacher": {
+        "password": "teach123",
+        "role": "admin",
+        "email": "teacher@mergington.edu"
+    },
+    "alex": {
+        "password": "student123",
+        "role": "student",
+        "email": "alex@mergington.edu"
+    },
+    "jamie": {
+        "password": "student456",
+        "role": "student",
+        "email": "jamie@mergington.edu"
+    }
+}
+
+# Maps active auth token -> username.
+active_sessions = {}
+
+
+def _extract_bearer_token(authorization: Optional[str]) -> str:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing authorization token")
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization format")
+    token = authorization.replace("Bearer ", "", 1).strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    return token
+
+
+def get_current_user(authorization: Optional[str]) -> dict:
+    token = _extract_bearer_token(authorization)
+    username = active_sessions.get(token)
+    if not username:
+        raise HTTPException(status_code=401, detail="Session expired or invalid token")
+    user = users.get(username)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unknown user")
+    return {
+        "username": username,
+        "email": user["email"],
+        "role": user["role"],
+        "token": token,
+    }
+
+
+def require_admin(user: dict) -> None:
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
 
 # In-memory activity database
 activities = {
@@ -83,14 +142,63 @@ def root():
     return RedirectResponse(url="/static/index.html")
 
 
+@app.post("/auth/login")
+def login(payload: LoginRequest):
+    user = users.get(payload.username)
+    if not user or user["password"] != payload.password:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    token = str(uuid4())
+    active_sessions[token] = payload.username
+
+    return {
+        "token": token,
+        "user": {
+            "username": payload.username,
+            "email": user["email"],
+            "role": user["role"],
+        }
+    }
+
+
+@app.post("/auth/logout")
+def logout(authorization: Optional[str] = Header(default=None)):
+    user = get_current_user(authorization)
+    active_sessions.pop(user["token"], None)
+    return {"message": "Logged out successfully"}
+
+
+@app.get("/auth/me")
+def auth_me(authorization: Optional[str] = Header(default=None)):
+    user = get_current_user(authorization)
+    return {
+        "username": user["username"],
+        "email": user["email"],
+        "role": user["role"],
+    }
+
+
 @app.get("/activities")
-def get_activities():
+def get_activities(authorization: Optional[str] = Header(default=None)):
+    get_current_user(authorization)
     return activities
 
 
 @app.post("/activities/{activity_name}/signup")
-def signup_for_activity(activity_name: str, email: str):
+def signup_for_activity(
+    activity_name: str,
+    email: str,
+    authorization: Optional[str] = Header(default=None)
+):
     """Sign up a student for an activity"""
+    user = get_current_user(authorization)
+
+    if user["role"] == "student" and user["email"] != email:
+        raise HTTPException(
+            status_code=403,
+            detail="Students may only sign up with their own email"
+        )
+
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -111,8 +219,15 @@ def signup_for_activity(activity_name: str, email: str):
 
 
 @app.delete("/activities/{activity_name}/unregister")
-def unregister_from_activity(activity_name: str, email: str):
+def unregister_from_activity(
+    activity_name: str,
+    email: str,
+    authorization: Optional[str] = Header(default=None)
+):
     """Unregister a student from an activity"""
+    user = get_current_user(authorization)
+    require_admin(user)
+
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
